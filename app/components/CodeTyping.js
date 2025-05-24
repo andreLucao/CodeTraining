@@ -14,6 +14,7 @@ export default function CodeTyping() {
   const [selectedLanguage, setSelectedLanguage] = useState(languages[0]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [isCompleted, setIsCompleted] = useState(false);
+  const [mimicIDE, setMimicIDE] = useState(true);
   const textareaRef = useRef(null);
   const codeDisplayRef = useRef(null);
 
@@ -77,12 +78,12 @@ export default function CodeTyping() {
   };
 
   const handleKeyDown = (e) => {
+    const textarea = e.target;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
     if (e.key === 'Tab') {
       e.preventDefault();
-      
-      const textarea = e.target;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
       
       const newIndent = '  '; // 2 spaces
       const newText = userInput.substring(0, start) + newIndent + userInput.substring(end);
@@ -92,6 +93,108 @@ export default function CodeTyping() {
       setTimeout(() => {
         textarea.selectionStart = textarea.selectionEnd = start + newIndent.length;
       }, 0);
+      return;
+    }
+
+    if (!mimicIDE) return;
+
+    // Auto-completion for brackets, quotes, etc.
+    const pairs = {
+      '(': ')',
+      '[': ']',
+      '{': '}',
+      '"': '"',
+      "'": "'",
+      '`': '`'
+    };
+
+    if (pairs[e.key]) {
+      e.preventDefault();
+      const closingChar = pairs[e.key];
+      const newText = userInput.substring(0, start) + e.key + closingChar + userInput.substring(end);
+      setUserInput(newText);
+      
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+      }, 0);
+      return;
+    }
+
+    // Skip over closing characters if they match what's next
+    if ([')', ']', '}', '"', "'", '`'].includes(e.key)) {
+      if (userInput[start] === e.key) {
+        e.preventDefault();
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + 1;
+        }, 0);
+        return;
+      }
+    }
+
+    // Auto-indentation on Enter
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      const lines = userInput.substring(0, start).split('\n');
+      const currentLine = lines[lines.length - 1];
+      
+      // Get current indentation
+      const indentMatch = currentLine.match(/^(\s*)/);
+      const currentIndent = indentMatch ? indentMatch[1] : '';
+      
+      // Check if cursor is between auto-completed brackets
+      const charBefore = userInput[start - 1];
+      const charAfter = userInput[start];
+      const isBetweenBrackets = (charBefore === '{' && charAfter === '}') ||
+                               (charBefore === '(' && charAfter === ')') ||
+                               (charBefore === '[' && charAfter === ']');
+      
+      if (isBetweenBrackets) {
+        // Cursor is between auto-completed brackets - add newline with indent, move closing bracket down
+        const extraIndent = '  ';
+        const newText = userInput.substring(0, start) + '\n' + currentIndent + extraIndent + 
+                       '\n' + currentIndent + userInput.substring(start);
+        const cursorPos = start + 1 + currentIndent.length + extraIndent.length;
+        
+        setUserInput(newText);
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = cursorPos;
+        }, 0);
+        return;
+      }
+      
+      // Check if we need extra indentation (after opening brackets)
+      const needsExtraIndent = /[{(\[][\s]*$/.test(currentLine.trim());
+      const extraIndent = needsExtraIndent ? '  ' : '';
+      
+      // Just add newline with appropriate indentation
+      const newText = userInput.substring(0, start) + '\n' + currentIndent + extraIndent + userInput.substring(end);
+      const cursorPos = start + 1 + currentIndent.length + extraIndent.length;
+      
+      setUserInput(newText);
+      
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = cursorPos;
+      }, 0);
+      return;
+    }
+
+    // Handle backspace with smart bracket deletion
+    if (e.key === 'Backspace' && start === end && start > 0) {
+      const prevChar = userInput[start - 1];
+      const nextChar = userInput[start];
+      
+      // Delete matching pair if cursor is between them
+      if (pairs[prevChar] && pairs[prevChar] === nextChar) {
+        e.preventDefault();
+        const newText = userInput.substring(0, start - 1) + userInput.substring(start + 1);
+        setUserInput(newText);
+        
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = start - 1;
+        }, 0);
+        return;
+      }
     }
   };
 
@@ -197,6 +300,24 @@ export default function CodeTyping() {
                 ))}
               </select>
             </div>
+          </div>
+          
+          {/* IDE Features Toggle */}
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <label className="flex items-center space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mimicIDE}
+                onChange={(e) => setMimicIDE(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <div>
+                <span className="text-sm font-medium text-slate-700">Mimic IDE</span>
+                <p className="text-xs text-slate-500">
+                  Enable auto-indentation, bracket completion, and other IDE-like features
+                </p>
+              </div>
+            </label>
           </div>
         </div>
 

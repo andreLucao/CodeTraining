@@ -1,5 +1,6 @@
-export const code = `// app/api/users/route.js
+export const code = `// app/api/user/[email]/route.js
 import mongoose from 'mongoose';
+import User from '@/models/User';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -38,24 +39,10 @@ async function connectDB() {
   return cached.conn;
 }
 
-// Define the User schema
-const userSchema = new mongoose.Schema({
-  name: String,
-  email: { type: String, required: true, unique: true },
-  address: String,
-  phoneNumber: String,
-  paymentStatus: { type: String, enum: ['paid', 'unpaid'] }
-});
-
-// Create the User model
-const User = mongoose.models.User || mongoose.model('User', userSchema);
-
-export async function GET(request) {
+export async function GET(request, { params }) {
   try {
-    // Get the email from URL query parameters
-    const { searchParams } = new URL(request.url);
-    const email = searchParams.get('email');
-    
+    const email = params.email;
+
     if (!email) {
       return Response.json(
         { success: false, message: 'Email parameter is required' },
@@ -67,7 +54,7 @@ export async function GET(request) {
     await connectDB();
     
     // Find the user with the specified email
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('-__v');
     
     if (!user) {
       return Response.json(
@@ -76,16 +63,20 @@ export async function GET(request) {
       );
     }
     
-    // Extract and return only the required fields
-    const userData = {
-      name: user.name,
-      address: user.address,
-      phoneNumber: user.phoneNumber,
-      email: user.email,
-      paymentStatus: user.paymentStatus
-    };
-    
-    return Response.json({ success: true, user: userData });
+    // Return the user data
+    return Response.json({
+      success: true,
+      user: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        dateOfBirth: user.dateOfBirth,
+        phoneNumber: user.phoneNumber,
+        address: user.address,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
   } catch (error) {
     console.error('Database query error:', error);
     return Response.json(
