@@ -15,6 +15,10 @@ export default function CodeTyping() {
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [isCompleted, setIsCompleted] = useState(false);
   const [mimicIDE, setMimicIDE] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const [pausedTime, setPausedTime] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [pauseStartTime, setPauseStartTime] = useState(null);
   const textareaRef = useRef(null);
   const codeDisplayRef = useRef(null);
 
@@ -32,13 +36,23 @@ export default function CodeTyping() {
       setStartTime(null);
       setIsTyping(false);
       setIsCompleted(false);
+      setIsPaused(false);
+      setPausedTime(0);
+      setElapsedTime(0);
+      setPauseStartTime(null);
     }
   }, [selectedLanguage, selectedTemplate]);
 
   const calculateMetrics = () => {
     if (!startTime) return;
     
-    const timeElapsed = (Date.now() - startTime) / 1000 / 60; // in minutes
+    const currentTime = Date.now();
+    const totalElapsed = (currentTime - startTime) / 1000;
+    const activeTime = totalElapsed - (pausedTime / 1000);
+    const timeElapsedMinutes = activeTime / 60; // in minutes
+    
+    setElapsedTime(totalElapsed);
+    
     const wordsTyped = userInput.trim().split(/\s+/).length;
     const charsTyped = userInput.length;
     
@@ -51,23 +65,26 @@ export default function CodeTyping() {
     }
     const accuracyPercent = userInput.length > 0 ? Math.round((correctChars / userInput.length) * 100) : 100;
     
-    setWpm(Math.round(wordsTyped / timeElapsed));
-    setCpm(Math.round(charsTyped / timeElapsed));
+    if (timeElapsedMinutes > 0) {
+      setWpm(Math.round(wordsTyped / timeElapsedMinutes));
+      setCpm(Math.round(charsTyped / timeElapsedMinutes));
+    }
     setAccuracy(accuracyPercent);
     
     // Check if completed
     if (userInput === code) {
       setIsCompleted(true);
       setIsTyping(false);
+      setIsPaused(false);
     }
   };
 
   useEffect(() => {
-    if (isTyping) {
+    if (isTyping && !isPaused) {
       const interval = setInterval(calculateMetrics, 1000);
       return () => clearInterval(interval);
     }
-  }, [isTyping, userInput, startTime]);
+  }, [isTyping, isPaused, userInput, startTime, pausedTime]);
 
   const handleCodePaste = (e) => {
     setCode(e.target.value);
@@ -75,6 +92,33 @@ export default function CodeTyping() {
     setStartTime(null);
     setIsTyping(false);
     setIsCompleted(false);
+    setIsPaused(false);
+    setPausedTime(0);
+    setElapsedTime(0);
+    setPauseStartTime(null);
+  };
+
+  const togglePause = () => {
+    if (!isTyping) return;
+    
+    if (isPaused) {
+      // Resume: add paused duration to total paused time
+      if (pauseStartTime) {
+        setPausedTime(prev => prev + (Date.now() - pauseStartTime));
+        setPauseStartTime(null);
+      }
+      setIsPaused(false);
+    } else {
+      // Pause: record when pause started
+      setPauseStartTime(Date.now());
+      setIsPaused(true);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleKeyDown = (e) => {
@@ -199,6 +243,8 @@ export default function CodeTyping() {
   };
 
   const handleTyping = (e) => {
+    if (isPaused) return; // Prevent typing when paused
+    
     if (!isTyping && !isCompleted) {
       setStartTime(Date.now());
       setIsTyping(true);
@@ -249,6 +295,10 @@ export default function CodeTyping() {
     setWpm(0);
     setCpm(0);
     setAccuracy(100);
+    setIsPaused(false);
+    setPausedTime(0);
+    setElapsedTime(0);
+    setPauseStartTime(null);
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
@@ -377,20 +427,51 @@ export default function CodeTyping() {
 
           {/* Typing Area */}
           <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="bg-slate-100 px-4 py-3 border-b border-slate-200">
+            <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-slate-800 font-medium">Your Code</h3>
+              <div className="flex items-center space-x-4">
+                {/* Timer Display */}
+                <div className="flex items-center space-x-2 text-sm text-slate-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="font-mono">
+                    {formatTime(elapsedTime)}
+                  </span>
+                </div>
+                
+                {/* Pause/Play Button */}
+                <button
+                  onClick={togglePause}
+                  disabled={!isTyping || isCompleted}
+                  className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  title={isPaused ? "Resume typing" : "Pause typing"}
+                >
+                  {isPaused ? (
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
             <div className="p-4">
               <textarea
                 ref={textareaRef}
-                className="w-full h-96 p-4 border border-slate-300 rounded-lg font-mono text-sm leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                className={`w-full h-96 p-4 border border-slate-300 rounded-lg font-mono text-sm leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  isPaused ? 'bg-gray-50 cursor-not-allowed' : ''
+                }`}
                 placeholder="Start typing the code above..."
                 value={userInput}
                 onChange={handleTyping}
                 onKeyDown={handleKeyDown}
                 onScroll={handleScroll}
                 spellCheck="false"
-                disabled={isCompleted}
+                disabled={isCompleted || isPaused}
               />
             </div>
           </div>
