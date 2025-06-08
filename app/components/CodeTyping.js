@@ -53,22 +53,39 @@ export default function CodeTyping() {
     
     setElapsedTime(totalElapsed);
     
-    const wordsTyped = userInput.trim().split(/\s+/).length;
+    // Standard typing test calculation: 5 characters = 1 word
     const charsTyped = userInput.length;
+    const wordsTyped = charsTyped / 5; // Standard method
     
-    // Calculate accuracy
+    // Calculate accuracy - compare only the characters that have been typed
     let correctChars = 0;
-    for (let i = 0; i < userInput.length; i++) {
+    const comparisonLength = Math.min(userInput.length, code.length);
+    
+    for (let i = 0; i < comparisonLength; i++) {
       if (userInput[i] === code[i]) {
         correctChars++;
       }
     }
-    const accuracyPercent = userInput.length > 0 ? Math.round((correctChars / userInput.length) * 100) : 100;
     
+    // Accuracy calculation
+    const accuracyPercent = userInput.length > 0 
+      ? Math.round((correctChars / userInput.length) * 100) 
+      : 100;
+    
+    // WPM and CPM calculation
     if (timeElapsedMinutes > 0) {
-      setWpm(Math.round(wordsTyped / timeElapsedMinutes));
+      // Gross WPM (raw speed without error penalty)
+      const grossWpm = Math.round(wordsTyped / timeElapsedMinutes);
+      
+      // Net WPM (with error penalty) - subtract 1 WPM for each uncorrected error per minute
+      const incorrectChars = userInput.length - correctChars;
+      const errorRate = incorrectChars / timeElapsedMinutes; // errors per minute
+      const netWpm = Math.max(0, Math.round(grossWpm - errorRate));
+      
+      setWpm(netWpm); // Use net WPM for more accurate measurement
       setCpm(Math.round(charsTyped / timeElapsedMinutes));
     }
+    
     setAccuracy(accuracyPercent);
     
     // Check if completed
